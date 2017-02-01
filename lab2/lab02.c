@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 
 /* real times over thread count
  *
@@ -51,7 +53,7 @@ int main(int argc, char** argv){
         char first[BUFFER_SIZE];
         char last[BUFFER_SIZE];
         float gpa;
-        read_state = fscanf(file,"%[^,],%[^,],%f\n",&first,&last,&gpa);
+        read_state = fscanf(file,"%[^,],%[^,],%f\n",first,last,&gpa);
 
         /* save the top student in this file */
         if(top.gpa < gpa){
@@ -65,6 +67,7 @@ int main(int argc, char** argv){
       /* copy over the top students to the array */
       memcpy(&top_students[i-1],&top,sizeof(struct student));
     }
+    printf("Thread #%d finished\n",omp_get_thread_num());
     /* wait for all threads to finish */
     #pragma omp barrier
   }
