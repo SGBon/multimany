@@ -1,10 +1,16 @@
+/* lab03 timings:
+ * 3 threads: 0.023s
+ * 4 threads: 0.020s
+ * 8 threads: 0.018s
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <omp.h>
 
 #define QUEUE_LENGTH 10
-#define NUM_THREADS 4
+#define NUM_THREADS 6
 #define BUF_LEN 20
 
 struct queue{
@@ -30,6 +36,9 @@ void enqueue(struct queue *q, const double value);
 
 /* remove value from queue */
 enum queue_state dequeue(struct queue *q, double *ret);
+
+/* double to degrees minutes seconds */
+void dtdms(char *buffer, size_t length, double value, char is_lat);
 
 int main(){
   struct queue lats;
@@ -60,30 +69,39 @@ int main(){
       struct queue *q = threadid == 0 ? &lats : &longs;
       int *finish_ref = threadid == 0 ? &lat_finish : &long_finish;
       double value;
-      int read_state = 1;
-      do{
+      while(1){
         if(queue_is_full(q)){
           continue;
         }else{
-          read_state = fscanf(file,"%lf\n",&value);
+          const int read_state = fscanf(file,"%lf\n",&value);
+          if(read_state == EOF){
+            break;
+          }
           #pragma omp critical
           {
             enqueue(q,value);
-            printf("ENQUEUEING: %f\n",value);
           }
         }
-      }while(read_state != EOF);
+      }
       *finish_ref = 0;
       fclose(file);
     }
 
-    printf("Thread %d arriving at process\n",threadid);
-
     /* divide the queues amongst the threads based on
      * the thread id being even/odd
      */
-    struct queue *q = threadid & 1 ? &lats : &longs;
-    int *finish_ref = threadid & 1 ? &lat_finish : &long_finish;
+    struct queue *q;
+    int *finish_ref;
+    char is_lat;
+    if(threadid & 1){
+      q = &lats;
+      finish_ref = &lat_finish;
+      is_lat = 1;
+    }else{
+      q = &longs;
+      finish_ref = &long_finish;
+      is_lat = 0;
+    }
 
     /* process the queues */
     while(*finish_ref || !queue_is_empty(q)){
@@ -96,7 +114,9 @@ int main(){
       if(qs == FAIL){
         continue;
       }else if (qs == SUCCESS){
-        printf("DEQUEUEING: %lf\n",value);
+        char buffer[BUF_LEN];
+        dtdms(buffer,BUF_LEN,value,is_lat);
+        printf("%lf converted to %s\n",value,buffer);
       }
     }
   }
@@ -140,4 +160,20 @@ enum queue_state dequeue(struct queue *q, double *ret){
     }
     return SUCCESS;
   }
+}
+
+
+void dtdms(char *buffer, size_t length, double value, char is_lat){
+  int first = (int) value;
+  double second = ((value - first)*100);
+  double third = ((second - (int) second)*100);
+  char dir;
+  char neg = first < 0;
+  if(is_lat == 1){
+    dir = neg ? 'S' : 'N';
+  }else{
+    dir = neg ? 'W' : 'E';
+  }
+
+  snprintf(buffer,length,"%d\xc2\xb0 %d\' %d\" %c",first,(int)second,(int)third,dir);
 }
