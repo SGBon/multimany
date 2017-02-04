@@ -1,7 +1,7 @@
 /* lab03 timings:
- * 3 threads: 0.023s
- * 4 threads: 0.020s
- * 8 threads: 0.018s
+ * 1 thread: 0.021s
+ * 2 threads: 0.027s
+ * 4 threads: 0.024s
  */
 
 #include <stdio.h>
@@ -10,7 +10,7 @@
 #include <omp.h>
 
 #define QUEUE_LENGTH 10
-#define NUM_THREADS 6
+#define NUM_THREADS 2
 #define BUF_LEN 20
 
 struct queue{
@@ -22,6 +22,11 @@ struct queue{
 enum queue_state{
   SUCCESS,
   FAIL
+};
+
+enum latlong_desc{
+  LATITUDE,
+  LONGITUDE
 };
 
 /* initialize the queue */
@@ -38,7 +43,7 @@ void enqueue(struct queue *q, const double value);
 enum queue_state dequeue(struct queue *q, double *ret);
 
 /* double to degrees minutes seconds */
-void dtdms(char *buffer, size_t length, double value, char is_lat);
+void dtdms(char *buffer, size_t length, double value, enum latlong_desc lld);
 
 int main(){
   struct queue lats;
@@ -55,68 +60,122 @@ int main(){
   int lat_finish = 1;
   int long_finish = 1;
 
-  #pragma omp parallel
+  #pragma omp parallel shared(lats, longs, lat_finish, long_finish)
   {
     const int threadid = omp_get_thread_num();
-    FILE *file = NULL;
-    if(threadid == 0)
-      file = fopen(lat_file,"r");
-    else if (threadid == 1)
-      file = fopen(long_file,"r");
-
-    /* if file isn't null, perform reading */
-    if(file != NULL){
-      struct queue *q = threadid == 0 ? &lats : &longs;
-      int *finish_ref = threadid == 0 ? &lat_finish : &long_finish;
-      double value;
-      while(1){
-        if(queue_is_full(q)){
-          continue;
-        }else{
-          const int read_state = fscanf(file,"%lf\n",&value);
-          if(read_state == EOF){
-            break;
+    const int numthreads = omp_get_num_threads();
+    #pragma omp sections nowait
+    {
+      /* latitude file reader thread */
+      #pragma omp section
+      {
+        FILE *file = fopen(lat_file,"r");
+        double value;
+        while(1){
+          if(queue_is_full(&lats)){
+            /* if we have less than 3 threads, producers must consume as well */
+            if(numthreads < 3){
+              double value;
+              enum queue_state qs;
+              #pragma omp critical (lat_lock)
+              {
+                qs = dequeue(&lats,&value);
+              }
+              if (qs == SUCCESS){
+                char buffer[BUF_LEN];
+                dtdms(buffer,BUF_LEN,value,LATITUDE);
+                printf("%lf converted to %s\n",value,buffer);
+              }
+            }
+          }else{
+            const int read_state = fscanf(file,"%lf\n",&value);
+            if(read_state == EOF){
+              break;
+            }
+            #pragma omp critical (lat_lock)
+            {
+              enqueue(&lats,value);
+            }
           }
-          #pragma omp critical
+        }
+        fclose(file);
+        lat_finish = 0;
+      }
+
+      /* longitude file reader thread */
+      #pragma omp section
+      {
+        FILE *file = fopen(long_file,"r");
+        double value;
+        while(1){
+          if(queue_is_full(&longs)){
+            /* if we have less than 3 threads, producers must consume as well */
+            if(numthreads < 3){
+              double value;
+              enum queue_state qs;
+              #pragma omp critical (long_lock)
+              {
+                qs = dequeue(&longs,&value);
+              }
+              if (qs == SUCCESS){
+                char buffer[BUF_LEN];
+                dtdms(buffer,BUF_LEN,value,LATITUDE);
+                printf("%lf converted to %s\n",value,buffer);
+              }
+            }
+          }else{
+            const int read_state = fscanf(file,"%lf\n",&value);
+            if(read_state == EOF){
+              break;
+            }
+            #pragma omp critical (long_lock)
+            {
+              enqueue(&longs,value);
+            }
+          }
+        }
+        fclose(file);
+        long_finish = 0;
+      }
+
+    }
+
+    #pragma omp sections
+    {
+      /* latitude queue consumer */
+      #pragma omp section
+      {
+        while(lat_finish || !queue_is_empty(&lats)){
+          double value;
+          enum queue_state qs;
+          #pragma omp critical (lat_lock)
           {
-            enqueue(q,value);
+            qs = dequeue(&lats,&value);
+          }
+          if (qs == SUCCESS){
+            char buffer[BUF_LEN];
+            dtdms(buffer,BUF_LEN,value,LATITUDE);
+            printf("%lf converted to %s\n",value,buffer);
           }
         }
       }
-      *finish_ref = 0;
-      fclose(file);
-    }
 
-    /* divide the queues amongst the threads based on
-     * the thread id being even/odd
-     */
-    struct queue *q;
-    int *finish_ref;
-    char is_lat;
-    if(threadid & 1){
-      q = &lats;
-      finish_ref = &lat_finish;
-      is_lat = 1;
-    }else{
-      q = &longs;
-      finish_ref = &long_finish;
-      is_lat = 0;
-    }
-
-    /* process the queues */
-    while(*finish_ref || !queue_is_empty(q)){
-      double value;
-      enum queue_state qs;
-      #pragma omp critical
+      /* longitude queue consumer */
+      #pragma omp section
       {
-        qs = dequeue(q,&value);
-      }
-      if(qs == FAIL){
-        continue;
-      }else if (qs == SUCCESS){
-        char buffer[BUF_LEN];
-        dtdms(buffer,BUF_LEN,value,is_lat);
-        printf("%lf converted to %s\n",value,buffer);
+        while(long_finish || !queue_is_empty(&longs)){
+          double value;
+          enum queue_state qs;
+          #pragma omp critical (long_lock)
+          {
+            qs = dequeue(&longs,&value);
+          }
+          if (qs == SUCCESS){
+            char buffer[BUF_LEN];
+            dtdms(buffer,BUF_LEN,value,LONGITUDE);
+            printf("%lf converted to %s\n",value,buffer);
+          }
+        }
       }
     }
   }
@@ -163,13 +222,13 @@ enum queue_state dequeue(struct queue *q, double *ret){
 }
 
 
-void dtdms(char *buffer, size_t length, double value, char is_lat){
+void dtdms(char *buffer, size_t length, double value, enum latlong_desc lld){
   int first = (int) value;
   double second = ((value - first)*100);
   double third = ((second - (int) second)*100);
   char dir;
   char neg = first < 0;
-  if(is_lat == 1){
+  if(lld == LATITUDE){
     dir = neg ? 'S' : 'N';
   }else{
     dir = neg ? 'W' : 'E';
