@@ -47,6 +47,7 @@ void *stock_exchange(void *t);
 void update_stock(int id, int chance, float price_var);
 
 int main(void) {
+  /* create each stock broker's portfolio */
   struct investor_portfolio portfolios[NUM_BROKERS];
   {
     struct investor_stock s00 = {'A', 1.10, 5, 100.00, 5};
@@ -99,7 +100,6 @@ int main(void) {
 
   //Activity #3
   for(i = NUM_THREADS - NUM_BROKERS; i < NUM_THREADS;++i){
-    printf("%d\n",i);
     error = pthread_create(&threads[i], &attr, stock_broker, (void *) &portfolios[i - 1]);
     if (error) {
       printf("ERROR: create() buy_stock: %d %d\n",i, error);
@@ -127,11 +127,13 @@ int main(void) {
 
 #define MONITOR_THREADS 3
 
+/* struct used as parameter type for stock monitor threads */
 struct stock_monitor_data{
   int id;
   struct investor_stock is;
 };
 
+/* simulates a broker, takes an investor_stock struct as an argument */
 void *stock_broker(void *t) {
   int i, error;
   pthread_t threads[MONITOR_THREADS];
@@ -144,6 +146,9 @@ void *stock_broker(void *t) {
   pthread_attr_setdetachstate(&attr,PTHREAD_CREATE_JOINABLE);
 
   //Activity #2
+  /* create stock monitors for each individual stock that the broker
+   * is interested in
+   */
   for(i = 0; i < MONITOR_THREADS;++i){
     monitor_data[i].id = i;
     monitor_data[i].is = ((struct investor_portfolio *) t)->s[i];
@@ -202,10 +207,11 @@ void *stock_exchange(void *t) {
     update_stock(0, rand()%3, (rand()%10 - 3.6)/2.3);
     update_stock(1, rand()%7, (rand()%12 - 5)/2.3);
     update_stock(2, rand()%6, (rand()%7 - 1)/2.1);
-    //sleep(1);
+    sleep(1);
   }
   market_running = 0;
   /* send final signal that market is finished */
+  sleep(2);
   for(int i = 0; i < NUM_STOCKS; ++i){
     pthread_mutex_lock(&my_stock_mutex[i]);
     pthread_cond_broadcast(&my_stock_price_cond[i]);
