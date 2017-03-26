@@ -5,7 +5,7 @@
 #include <CL/cl.h>
 #include "clutil.h"
 
-#define IMAGE_LENGTH (5)
+#define IMAGE_LENGTH (10)
 #define FILTER_LENGTH (3)
 
 int main(int argc, char **argv){
@@ -187,12 +187,28 @@ int main(int argc, char **argv){
 
         /* enqueue kernel for execution */
         err = clEnqueueNDRangeKernel(commands[i][j],kernels[i],1,&last_work_offset,&workloads[i][j],NULL,0,NULL,NULL);
+
         last_work_offset += workloads[i][j];
       }
     }
   }
 
+  last_work_offset = 0;
+  /* wait for all commands to finish execution */
+  for(unsigned int i = 0; i < num_platforms;++i){
+    for(unsigned int j = 0; j < num_devices[i]; ++j){
+      /* enqueue a read that's blocking to the same kernel */
+      err = clEnqueueReadBuffer(commands[i][j],d_result[i],CL_TRUE,sizeof(float)*last_work_offset,sizeof(float)*workloads[i][j],h_result+last_work_offset,0,NULL,NULL);
+      last_work_offset += workloads[i][j];
+    }
+  }
 
+  /* check final result */
+  printf("Result of convolution:\n[");
+  for(unsigned int i = 0; i < image_len; ++i){
+    printf("%f ",h_result[i]);
+  }
+  printf("]\n");
 
   /* free all of the memory */
   for(unsigned int i = 0; i < num_platforms; ++i){
