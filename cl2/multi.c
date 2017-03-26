@@ -5,7 +5,7 @@
 #include <CL/cl.h>
 #include "clutil.h"
 
-#define IMAGE_LENGTH (10)
+#define IMAGE_LENGTH (1000)
 #define FILTER_LENGTH (3)
 
 int main(int argc, char **argv){
@@ -43,8 +43,6 @@ int main(int argc, char **argv){
   size_t **workloads = NULL;
 
   read_cl_source("multi.cl",&kernel_source);
-
-  printf("%s\n",kernel_source);
 
   /* get platforms on machine */
   clGetPlatformIDs(0,NULL,&num_platforms);
