@@ -1,5 +1,6 @@
 //
-// File:       hello.c
+// File:       matrix_mult_parr
+// license here from hello.c
 //
 // Abstract:   A simple "Hello World" compute example showing basic usage of OpenCL which
 //             calculates the mathematical square (X[i] = pow(X[i],2)) for a buffer of
@@ -50,14 +51,15 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <fcntl.h>
+/*
+ * The kernel code is inefficient as for every run of the kernel there are kd*2
+ * memory accesses to the input matrices, and another memory access to store the
+ * result matrix. An improvement to the parallelization would be to use vectorized
+ * data types which the GPU is well optimized for.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #ifdef __APPLE__
   #include <OpenCL/opencl.h>
 #else
@@ -210,7 +212,7 @@ int main(void)
     //
     size_t global[2] = {md,nd};
 
-    err = clEnqueueNDRangeKernel(commands, kernel, 1, NULL, global, NULL, 0, NULL, NULL);
+    err = clEnqueueNDRangeKernel(commands, kernel, 2, NULL, global, NULL, 0, NULL, NULL);
     if (err)
     {
         printf("Error: Failed to execute kernel! %d\n",err);
@@ -228,6 +230,13 @@ int main(void)
     {
         printf("Error: Failed to read output array! %d\n", err);
         exit(1);
+    }
+
+    for (m=0; m < md; m++) {
+      for (n=0; n < nd; n++) {
+        printf("%f\t", h_matrix_result[m*nd+n]);
+      }
+      printf("\n");
     }
 
     // Shutdown and cleanup
