@@ -162,7 +162,7 @@ int main(int argc, char **argv){
     if(num_devices[i] > 0){
       d_image[i] = clCreateBuffer(contexts[i],CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,sizeof(float)*IMAGE_LENGTH,h_image,NULL);
       d_filter[i] = clCreateBuffer(contexts[i],CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,sizeof(float)*FILTER_LENGTH,h_filter,NULL);
-      d_result[i] = clCreateBuffer(contexts[i],CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,sizeof(float)*IMAGE_LENGTH,h_result,NULL);
+      d_result[i] = clCreateBuffer(contexts[i],CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR,sizeof(float)*IMAGE_LENGTH,h_result,NULL);
       kernels[i] = clCreateKernel(programs[i],"one_d_conv",&err);
       if(err){
         print_error("clCreateKernel()",err);
